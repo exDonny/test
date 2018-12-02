@@ -1,0 +1,60 @@
+
+insert overwrite table orig_client_tmp_adr_exception_all partition(platform='adr', dt,hour)
+select 
+a.id as id,logdate,a.logtime as logtime,action,cid,uid,vid,pid,gid,cp,re,wkey,avers,os,model,params,aid,ip,mno,username,a.host as host,dt,hour
+from
+(select  
+id,logdate,logtime,action,cid,uid,vid,pid,gid,cp,re,wkey,avers,os,model,params,aid,ip,mno,username,host,dt,hour
+from orig_client  where platform='adr' and dt = '2018-11-24' and hour ='20' ) as a
+left join(
+select id,host,logtime
+from etl_client where platform='adr' and dt = '2018-11-24' and logtime >='20:00:00' and logtime <='20:59:59' 
+) as e 
+on (e.host = a.host and e.id = a.id and e.logtime = a.logtime)
+where e.host is null and e.id is null and e.logtime is null
+--2.根据过滤规则，逐条union all 进入etl_client_exception，之后比较两张表的数量。。。。
+--（1）action过滤：同ios
+--（2）filter_rule过滤：根据uid等对历史异常设备进行过滤
+--（3）uid不合法，通过一个udf过滤
+--（4）酒店列表页中预加载的
+--（5）uid一天之内访问1个action，大于等于10个gid
+--（6）uid为空或0，并且没下过酒店单（action like '%Submit%' or action in ('SrvHotelBook', 	 
+--'SrvHotelOtaTtsSubmitOrder','hRoomOrderBook')），对应的gid
+--（7）adr 反抓取和非qav uid过滤
+
+-- 安卓异常数据总量： 4329867
+select count(*) from orig_client_tmp_adr_exception_all where platform='adr' and dt='2018-11-24' and hour='20'; 
+--4280198   -4280266                    差：49601
+select count(*) from (select id,host,hour from etl_client_exception where platform='adr' and dt='2018-11-24' and hour='20' group by id,host,hour) a ; 
+
+--595103
+select count(*) from orig_client_tmp_ios_exception_all_clean_exc where platform='adr' and dt='2018-11-24' and hour='20'; 
+
+
+
+-----12823921
+select count(*) from etl_client where platform='adr' and dt='2018-11-24' and logtime >='20:00:00' and logtime <='20:59:59';
+-----17153788
+select count(*) from orig_client where platform='adr' and dt='2018-11-24' and hour='20';
+
+
+insert overwrite table orig_client_tmp_ios_exception_all_clean_exc partition(platform='adr', dt,hour)
+select 
+a.id as id,logdate,a.logtime as logtime,action,cid,uid,vid,pid,gid,cp,re,wkey,avers,os,model,params,aid,ip,mno,username,a.host as host,dt,a.hour
+from
+(select  
+id,logdate,logtime,action,cid,uid,vid,pid,gid,cp,re,wkey,avers,os,model,params,aid,ip,mno,username,host,dt,hour
+from orig_client_tmp_adr_exception_all  where platform='adr' and dt = '2018-11-24' and hour ='20' ) as a
+left join ( select id,host,hour from etl_client_exception where platform='adr' and dt='2018-11-24' and hour='20' group by id,host,hour ) b
+on (a.id=b.id and a.host=b.host and a.hour=b.hour) 
+where b.id is null and b.host is null 
+
+
+
+
+
+
+
+
+
+
